@@ -34,7 +34,7 @@ uploaded_files = st.file_uploader(
 if uploaded_files:
     for file in uploaded_files:
         if file.name in [item["filename"] for item in st.session_state.history]:
-            continue  # Doppelte vermeiden
+            continue
 
         image = Image.open(file)
         with st.spinner(f"Analysiere {file.name} …"):
@@ -50,11 +50,12 @@ if uploaded_files:
                     "top_label": top_label,
                     "top_score": top_score,
                     "top5": top5,
-                    "id": len(st.session_state.history)
+                    "id": len(st.session_state.history),
+                    "timestamp": pd.Timestamp.now()
                 }
                 st.session_state.history.append(entry)
-            except:
-                st.error(f"Fehler bei {file.name}")
+            except Exception as e:
+                st.error(f"Fehler bei {file.name}: {e}")
 
 # ─── Tabs ───────────────────────────────────────────────
 tab1, tab2, tab3 = st.tabs(["📊 Ergebnisse", "🖼️ Galerie & Vergleich", "⭐ Favoriten & Export"])
@@ -75,22 +76,36 @@ with tab1:
         st.info("Noch keine Bilder analysiert.")
 
 with tab2:
-    cols = st.columns(3)
-    for i, entry in enumerate(st.session_state.history):
-        col = cols[i % 3]
-        col.image(entry["image"], use_column_width=True)
-        col.markdown(f"**{entry['top_label']}** ({entry['top_score']:.1%})")
-        col.caption(entry["filename"])
+    if not st.session_state.history:
+        st.info("Noch keine Bilder vorhanden.")
+    else:
+        # Kategorien gruppieren
+        categories = {}
+        for entry in st.session_state.history:
+            cat = entry["top_label"]
+            if cat not in categories:
+                categories[cat] = []
+            categories[cat].append(entry)
 
-        # Favorit-Button pro Bild
-        fav_key = f"fav_{entry['id']}"
-        is_fav = entry["id"] in st.session_state.favorites
-        if col.button("★ Favorit" if is_fav else "☆ Merken", key=fav_key):
-            if is_fav:
-                st.session_state.favorites.remove(entry["id"])
-            else:
-                st.session_state.favorites.add(entry["id"])
-            st.rerun()
+        sorted_cats = sorted(categories.keys())
+
+        for cat in sorted_cats:
+            with st.expander(f"📂 {cat} ({len(categories[cat])} Bilder)"):
+                cols = st.columns(3)
+                for i, entry in enumerate(categories[cat]):
+                    col = cols[i % 3]
+                    col.image(entry["image"], use_column_width=True)
+                    col.markdown(f"**{entry['top_label']}** ({entry['top_score']:.1%})")
+                    col.caption(entry["filename"])
+
+                    fav_key = f"fav_{entry['id']}"
+                    is_fav = entry["id"] in st.session_state.favorites
+                    if col.button("★ Favorit" if is_fav else "☆ Merken", key=fav_key):
+                        if is_fav:
+                            st.session_state.favorites.remove(entry["id"])
+                        else:
+                            st.session_state.favorites.add(entry["id"])
+                        st.rerun()
 
     if st.button("Alles löschen"):
         st.session_state.history = []
